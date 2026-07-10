@@ -1,0 +1,11 @@
+__pycache__
+build
+CompileSave
+dist
+.idea/
+Include/
+Lib/
+Scripts/
+config.json
+*.csv
+*.xml

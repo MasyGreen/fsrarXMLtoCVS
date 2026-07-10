@@ -1,0 +1,1 @@
+fsrarXMLtoCVS.exe "d:\Work\...\data-20260701t0000-structure-20190918t0000.xml" "d:\Work\...\result_big.csv"
