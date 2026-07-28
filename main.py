@@ -297,7 +297,8 @@ if __name__ == '__main__':
                 'Полное_и_сокращенное_наименование_организации_сельскохозяйственного_товаропроизводителя_с_указанием_ее_ОПФ',
                 'ИНН_организации_сельскохозяйственного_товаропроизводителя_'
             ]
-            file_from_arg = Path('data-20260701t0000-structure-20190918t0000.xml')
+            file_from_arg = Path('TData\\example.xml') # "as_is_use_filter": "01.01.2025",  "as_is_only_unique": true
+
 
             file_to_arg = Path('result.csv')
         else:

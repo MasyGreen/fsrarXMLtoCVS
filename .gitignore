@@ -9,3 +9,4 @@ Scripts/
 config.json
 *.csv
 *.xml
+!example.xml
