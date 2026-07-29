@@ -6,7 +6,7 @@ dist
 Include/
 Lib/
 Scripts/
-config.json
+src/config.json
 *.csv
 *.xml
 !example.xml

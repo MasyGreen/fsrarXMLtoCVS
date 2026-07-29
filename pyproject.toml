@@ -3,6 +3,8 @@ name = "ksuxml"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "et>=0.0.2",
     "keyboard>=0.13.5",
     "pyinstaller>=6.21.0",
+    "pytest>=9.1.1",
 ]
