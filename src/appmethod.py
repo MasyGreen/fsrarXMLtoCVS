@@ -1,6 +1,9 @@
 import json
+import os
 from datetime import datetime
 from pathlib import Path
+
+import psutil
 
 import appsettings as settings
 
@@ -79,3 +82,11 @@ class AppMethod:
             setattr(result, member, cfg.get(member, getattr(result, member)))
 
         return True, result
+
+    @staticmethod
+    def get_current_memory() -> float:
+        """
+        Справочно получаем выделенную память под приложение
+        :return: память в мегабайтах
+        """
+        return psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2

@@ -1,5 +1,6 @@
 import csv
 import locale
+import os
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -78,93 +79,107 @@ class XMLToCVS:
             print("Ошибка: Входной файл XML не указан в контексте.")
             return
 
+        aml = app_method.AppMethod()
+
         filter_date_from_row: datetime | None = None
 
         # Словарь уникальных ключей (Отбор уникальных значений)
         seen_keys = set()
 
-        aml = app_method.AppMethod()
-        et_context = ET.iterparse(ctx.file_from_arg, events=('start', 'end'))
+        # Получаем общий размер файла в байтах
+        file_size = os.path.getsize(ctx.file_from_arg)
 
-        index = 0
-        skip_date = 0
-        skip_unique = 0
-        csv_row = {}
-        key1: str = ''
-        key2: str = ''
-        key3: str = ''
-        for event, elem in et_context:
+        # Открываем файл для чтения
+        with open(ctx.file_from_arg, 'rb') as f:
+            # Инициализируем итератор
+            et_context = ET.iterparse(f, events=('start', 'end'))
 
-            # Опционально: ограничение на первые элементы - для отладки
-            if ctx.settings.as_max_row_count != 0 and index == (ctx.settings.as_max_row_count + 1):
-                break
+            index = 0
+            skip_date = 0
+            skip_unique = 0
+            write_in_file = 0
+            csv_row = {}
+            key1: str = ''
+            key2: str = ''
+            key3: str = ''
+            for event, elem in et_context:
 
-            if event == 'start':
-                # print(f"-> Начало тега: {elem.tag}, Атрибуты: {elem.attrib}")
-                # print(f"------------------------------------------------------------------\n{elem.tag} ({index}), Атрибуты: {elem.attrib}")
-                if elem.tag == 'row':
-                    index += 1
-                    if index % 1000 == 0:
-                        print(f"Прочитано {index:n} элементов")
-                    # Инициализируем результат, одновременно является фильтром
-                    csv_row = self.new_csv_row()
-                    filter_date_from_row = None
-                    key1 = ''
-                    key2 = ''
-                    key3 = ''
-                    # raw_xml_bytes = ET.tostring(elem, encoding='utf-8')
-                    # raw_xml_text = raw_xml_bytes.decode('utf-8')
-                    # print(f"--- Оригинальный XML узла <{elem.tag}> {index} ---")
-                    # print(raw_xml_text)
+                # Опционально: ограничение на первые элементы - для отладки
+                if ctx.settings.as_max_row_count != 0 and index == (ctx.settings.as_max_row_count + 1):
+                    break
 
-            elif event == 'end':
-                # Здесь доступны текстовые данные внутри тега
-                text = elem.text.strip() if elem.text else ""
-                if text:
-                    # Значение поля для фильтра
-                    if elem.tag == constants.cnField_Filter:
-                        filter_date_from_row = aml.parse_date(text)
-                    elif elem.tag == constants.cnField_Filter_U1:
-                        key1 = elem.text
-                    elif elem.tag == constants.cnField_Filter_U2:
-                        key2 = elem.text
-                    elif elem.tag == constants.cnField_Filter_U3:
-                        key3 = elem.text
+                if event == 'start':
+                    # print(f"-> Начало тега: {elem.tag}, Атрибуты: {elem.attrib}")
+                    # print(f"------------------------------------------------------------------\n{elem.tag} ({index}), Атрибуты: {elem.attrib}")
+                    if elem.tag == 'row':
+                        index += 1
+                        if index % 1000 == 0:
+                            # Вычисляем процент прочитанного
+                            percent = (f.tell() / file_size) * 100
 
-                    # Сохраняем выбранные поля
-                    if elem.tag in self.read_fields:
-                        csv_row[elem.tag] = text
-                        # print(f"{elem.tag}: {text}")
+                            print(
+                                f"Прочитано {index:n} (пропущено по дате {skip_date:n}; пропущено по ключу {skip_unique:n}) | {aml.get_current_memory():.2f} Mb | {percent:.2f}%",
+                                end="\r", flush=True)
+                        # Инициализируем результат, одновременно является фильтром
+                        csv_row = self.new_csv_row()
+                        filter_date_from_row = None
+                        key1 = ''
+                        key2 = ''
+                        key3 = ''
+                        # raw_xml_bytes = ET.tostring(elem, encoding='utf-8')
+                        # raw_xml_text = raw_xml_bytes.decode('utf-8')
+                        # print(f"--- Оригинальный XML узла <{elem.tag}> {index} ---")
+                        # print(raw_xml_text)
 
-                if elem.tag == 'row':
-                    # Фильтр на дату (при заполненном значении)
-                    if ((
-                            ctx.filter_date_from_settings is not None and filter_date_from_row is not None and filter_date_from_row >= ctx.filter_date_from_settings)
-                            or ctx.filter_date_from_settings is None):
-                        # Контроль на уникальность
-                        key = (key1, key2, key3)
-                        if ((ctx.settings.as_is_only_unique and key not in seen_keys)
-                                or not ctx.settings.as_is_only_unique):
-                            # Собираем уникальные элементы только по настройке
-                            if ctx.settings.as_is_only_unique:
-                                seen_keys.add(key)
+                elif event == 'end':
+                    # Здесь доступны текстовые данные внутри тега
+                    text = elem.text.strip() if elem.text else ""
+                    if text:
+                        # Значение поля для фильтра
+                        if elem.tag == constants.cnField_Filter:
+                            filter_date_from_row = aml.parse_date(text)
+                        elif elem.tag == constants.cnField_Filter_U1:
+                            key1 = elem.text
+                        elif elem.tag == constants.cnField_Filter_U2:
+                            key2 = elem.text
+                        elif elem.tag == constants.cnField_Filter_U3:
+                            key3 = elem.text
 
-                            _print_row(ctx, filter_date_from_row, index, csv_row, False)
+                        # Сохраняем выбранные поля
+                        if elem.tag in self.read_fields:
+                            csv_row[elem.tag] = text
+                            # print(f"{elem.tag}: {text}")
 
-                            yield [csv_row]
+                    if elem.tag == 'row':
+                        # Фильтр на дату (при заполненном значении)
+                        if ((
+                                ctx.filter_date_from_settings is not None and filter_date_from_row is not None and filter_date_from_row >= ctx.filter_date_from_settings)
+                                or ctx.filter_date_from_settings is None):
+                            # Контроль на уникальность
+                            key = (key1, key2, key3)
+                            if ((ctx.settings.as_is_only_unique and key not in seen_keys)
+                                    or not ctx.settings.as_is_only_unique):
+                                # Собираем уникальные элементы только по настройке
+                                if ctx.settings.as_is_only_unique:
+                                    seen_keys.add(key)
 
+                                _print_row(ctx, filter_date_from_row, index, csv_row, False)
+                                write_in_file += 1
+                                yield [csv_row]
+
+                            else:
+                                _print_row(ctx, filter_date_from_row, index, csv_row, True)
+                                skip_unique += 1
                         else:
                             _print_row(ctx, filter_date_from_row, index, csv_row, True)
-                            skip_unique += 1
-                    else:
-                        _print_row(ctx, filter_date_from_row, index, csv_row, True)
-                        skip_date += 1
+                            skip_date += 1
 
-                elem.clear()
-        print(f"Всего прочитано: {(index - 1):n} (пропущено по дате {skip_date:n}; пропущено по ключу {skip_unique:n})")
+                    elem.clear()
+            print(
+                f"Записано {write_in_file:n} из {(index - 1):n} (пропущено по дате {skip_date:n}; пропущено по ключу {skip_unique:n}) | {aml.get_current_memory():.2f} Mb")
 
 
-def _print_row(ctx: AppContext, filter_date_from_row: datetime | None , index: int, csv_row, is_skip: bool):
+def _print_row(ctx: AppContext, filter_date_from_row: datetime | None, index: int, csv_row, is_skip: bool):
     """
     Вспомогательная функция вывода журнала
     :param ctx:
