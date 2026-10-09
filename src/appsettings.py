@@ -7,10 +7,12 @@ class AppSettings:
             fields: str = '',
             max_row_count: int = 0,
             is_use_filter: str = '',
-            is_only_unique: bool = False
+            is_only_unique: bool = False,
+            registry_url: str = 'https://fsrar.gov.ru/opendata/7710747640-reestrlic'
     ):
         self.as_isdebug = is_debug
         self.as_fields = fields
         self.as_max_row_count = max_row_count
         self.as_is_use_filter = is_use_filter
         self.as_is_only_unique = is_only_unique
+        self.as_registry_url = registry_url

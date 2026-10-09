@@ -10,3 +10,4 @@ src/config.json
 *.csv
 *.xml
 !example.xml
+*.txt

@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import keyboard
+import requests
+from bs4 import BeautifulSoup
 
 import appmethod as app_method
 import appsettings as app_settings
@@ -218,6 +220,59 @@ def main(ctx: AppContext):
     print(f"Выполнено за {end - start:.4f} сек")
 
 
+def parse_html(file_name: Path, ctx: AppContext):
+    """
+    Режим извлечения ссылок на *.zip файлы со страницы HTML
+    """
+    if len(ctx.settings.as_registry_url) == 0:
+        return
+    print(f'Разбор: {ctx.settings.as_registry_url}')
+    # URL страницы для анализа
+    url = ctx.settings.as_registry_url
+
+    # Заголовки, чтобы сайт не заблокировал запрос как бота
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    try:
+        # 1. Скачиваем содержимое страницы
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()  # Проверяем на ошибки (например, 404 или 500)
+
+        # 2. Инициализируем парсер BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 3. Находим все теги <href>, у которых атрибут href оканчивается на .zip
+        # Словарь уникальных значений, где ключом будет текст ссылки, а значением — сам URL
+        zip_links = {}
+
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag['href']
+            if str(href).lower().endswith('.zip'):
+                # Если ссылка относительная (например, /files/data.zip), делаем ее абсолютной
+                if not str(href).startswith('http'):
+                    from urllib.parse import urljoin
+                    href = urljoin(url, href)
+
+                # Очищаем текст ссылки от лишних пробелов и переносов строк
+                link_text = a_tag.get_text(strip=True) or "Без названия"
+
+                # Добавляем в словарь
+                if href not in zip_links:
+                    zip_links[link_text] = href
+
+        with open(file_name, 'w', encoding='utf-8') as file:
+            for zip_link in zip_links:
+                print(zip_link)
+                file.write(zip_link)
+
+
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при запросе к сайту: {e}")
+    print(f"Выполнено")
+
+
 def exit_app(message: str, is_debug: bool):
     """
     Вспомогательная функция для выхода (избавляет от дублирования кода)
@@ -240,6 +295,7 @@ if __name__ == '__main__':
     # Чтение настроек из файла
     cwd_path = Path.cwd()
     settings_file_name = cwd_path / constants.config_name
+    parse_file_name = cwd_path / constants.parse_name
     is_exist, settings = am.read_settings(settings_file_name)
 
     context = AppContext(settings=settings)
@@ -259,28 +315,49 @@ if __name__ == '__main__':
             print(
                 f"Фильтр: уникальность по составному ключу ['{constants.cnField_Filter_U1}', '{constants.cnField_Filter_U2}', '{constants.cnField_Filter_U3}']")
 
+        IsProcessHTML: bool = False
+
         if constants.cnIsLocalTest:
             # Локальная отладка. Не проводим проверок - формируем базовую выборку из тестовых данных
             context.read_fields_arg = constants.cnFields_Arg_Test
             context.file_from_arg = Path(
                 '../TData/example.xml')  # "as_is_use_filter": "01.01.2025",  "as_is_only_unique": true
             context.file_to_arg = Path('../result.csv')
+
+            # Включаем режим извлечения ссылок на *.zip файлы со страницы HTML
+            IsProcessHTML = constants.cnParseHTML
         else:
-            # Стандартный запуск. Разбор выводимых столбцов - имена XML элементов
-            context.read_fields_arg = [field.strip() for field in settings.as_fields.split(',')]
-
-            if not any(field.strip() for field in context.read_fields_arg):
-                exit_app(f"Не заполнен параметр 'as_fields' в {settings_file_name}", settings.as_isdebug)
-
+            # Определение режима работы (0 аргумент всегда py файл запуска)
             print("Аргументы:", sys.argv)
-            if len(sys.argv) < 3:
+            if len(sys.argv) == 2:
+                if sys.argv[1] == '--parsehtml':
+                    IsProcessHTML = True
+                    print('Режим извлечения ссылок на *.zip файлы со страницы HTML')
+                    if len(settings.as_registry_url) == 0:
+                        exit_app(f"Не заполнен параметр 'as_registry_url' в {settings_file_name}", settings.as_isdebug)
+                else:
+                    exit_app(
+                        f"Не распознан параметр запуска: ожидается '--parsehtml'...",
+                        settings.as_isdebug)
+            elif len(sys.argv) < 3:
                 exit_app(
-                    f"Отсутствуют обязательные аргументы\n1 - полный путь к файлу XML\n2 - полный путь к файлу CSV",
+                    f"Отсутствуют обязательные аргументы\n1 - полный путь к файлу XML\n2 - полный путь к файлу CSV\nИли '--parsehtml'",
                     settings.as_isdebug)
 
-            context.file_from_arg = Path(sys.argv[1])
+            if not IsProcessHTML:
+                context.file_from_arg = Path(sys.argv[1])
 
-            context.file_to_arg = Path(sys.argv[2])
+                context.file_to_arg = Path(sys.argv[2])
+
+        if IsProcessHTML:
+            parse_html(parse_file_name, context)
+            exit_app(f"Извлечения ссылок на *.zip файлы со страницы HTML завершено", settings.as_isdebug)
+
+        # Стандартный запуск. Разбор выводимых столбцов - имена XML элементов
+        context.read_fields_arg = [field.strip() for field in settings.as_fields.split(',')]
+
+        if not any(field.strip() for field in context.read_fields_arg):
+            exit_app(f"Не заполнен параметр 'as_fields' в {settings_file_name}", settings.as_isdebug)
 
         # 1. Определяем директорию назначения
         dir_path: Path | None = context.file_to_arg.parent if context.file_to_arg else None

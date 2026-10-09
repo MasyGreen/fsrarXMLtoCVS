@@ -3,9 +3,11 @@ name = "ksuxml"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
     "et>=0.0.2",
     "keyboard>=0.13.5",
     "psutil>=7.2.2",
     "pyinstaller>=6.21.0",
     "pytest>=9.1.1",
+    "requests>=2.34.2",
 ]
